@@ -248,10 +248,40 @@ const PeerComponent = () => {
     setConnectionStatus("connecting");
 
     // Enhanced configuration for better cross-platform compatibility
+    // const peerConfig = {
+    //   // host: "172.16.15.127",
+    //   host: "https://multiplayer.tenant-7654b5-asrpods.ord1.ingress.coreweave.cloud",
+    //   // port: 443,
+    //   path: "/",
+    //   debug: 3,
+    //   config: {
+    //     iceServers: [
+    //       { urls: "stun:stun.l.google.com:19302" },
+    //       { urls: "stun:stun1.l.google.com:19302" },
+    //       { urls: "stun:stun2.l.google.com:19302" },
+    //       { urls: "stun:stun3.l.google.com:19302" },
+    //       { urls: "stun:stun4.l.google.com:19302" },
+    //     ],
+    //     // For iOS compatibility, force ICE to use UDP by blocking TCP
+    //     iceTransportPolicy: platform === "ios" ? "all" : "all",
+    //     // Increase timeout for iOS connections which tend to be slower
+    //     iceCandidatePoolSize: platform === "ios" ? 10 : 5,
+    //   },
+    //   // Use best quality and stability settings for iOS
+    //   // These settings can help with iOS-specific connection issues
+    //   connectionOptions: {
+    //     reliable: true,
+    //     serialization: "json",
+    //     metadata: { platform },
+    //   },
+    // };
     const peerConfig = {
-      host: "172.16.15.127",
-      port: 9000,
-      path: "/",
+      // Use the Coreweave URL instead of IP address
+      host: "multiplayer.tenant-7654b5-asrpods.ord1.ingress.coreweave.cloud",
+      // Remove the port number when using the full URL
+      // port: 9000,  // Remove this line when using the URL
+      path: "/", // Keep the path
+      secure: true, // Add this for HTTPS
       debug: 3,
       config: {
         iceServers: [
@@ -261,20 +291,15 @@ const PeerComponent = () => {
           { urls: "stun:stun3.l.google.com:19302" },
           { urls: "stun:stun4.l.google.com:19302" },
         ],
-        // For iOS compatibility, force ICE to use UDP by blocking TCP
         iceTransportPolicy: platform === "ios" ? "all" : "all",
-        // Increase timeout for iOS connections which tend to be slower
         iceCandidatePoolSize: platform === "ios" ? 10 : 5,
       },
-      // Use best quality and stability settings for iOS
-      // These settings can help with iOS-specific connection issues
       connectionOptions: {
         reliable: true,
         serialization: "json",
         metadata: { platform },
       },
     };
-
     // Create a new peer
     try {
       peer.current = new Peer(newPeerId, peerConfig);
@@ -564,7 +589,10 @@ const PeerComponent = () => {
     }
 
     try {
-      const response = await fetch("http://172.16.15.127:9000/peerjs/peers");
+      // const response = await fetch("http://172.16.15.127:9000/peerjs/peers");
+      const response = await fetch(
+        "https://multiplayer.tenant-7654b5-asrpods.ord1.ingress.coreweave.cloud/peerjs/peers"
+      );
 
       if (!response.ok) {
         logMessage(
