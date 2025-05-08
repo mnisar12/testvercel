@@ -1,179 +1,9 @@
-// import React, { useState, useEffect, useRef } from "react";
-// import Peer from "peerjs";
-
-// const PeerComponent = () => {
-//   const [peerId, setPeerId] = useState(null);
-//   const [messageLog, setMessageLog] = useState([]);
-//   const [isConnected, setIsConnected] = useState(false);
-//   const [peerList, setPeerList] = useState([]); // List of all connected peers
-//   const [targetPeerId, setTargetPeerId] = useState(""); // To track the target peer ID
-//   const peer = useRef(null); // Ref to store the peer instance
-//   const connections = useRef({}); // Store connections to peers
-
-//   // Initialize PeerJS peer when the component is mounted
-//   useEffect(() => {
-//     // Initialize the peer object
-//     peer.current = new Peer({
-//       host: "172.16.15.127",
-//       port: 9000,
-//       path: "/",
-//     });
-
-//     // When the peer connection is established, handle events
-//     peer.current.on("open", (id) => {
-//       setPeerId(id);
-//       logMessage(`My peer ID is: ${id}`);
-//     });
-
-//     peer.current.on("error", (error) => {
-//       console.error("PeerJS error:", error);
-//     });
-
-//     // Handle incoming peer connections
-//     peer.current.on("connection", (conn) => {
-//       logMessage(`Incoming peer connection from ${conn.peer}!`);
-//       setPeerList((prevList) => {
-//         if (!prevList.includes(conn.peer)) {
-//           return [...prevList, conn.peer]; // Add the peer to the list
-//         }
-//         return prevList;
-//       });
-
-//       conn.on("data", (data) => {
-//         logMessage(`Received from ${conn.peer}: ${data}`);
-//       });
-
-//       conn.on("open", () => {
-//         conn.send("Hello!");
-//         connections.current[conn.peer] = conn; // Save the connection for messaging
-//       });
-
-//       // When a connection is closed, remove from the peer list
-//       conn.on("close", () => {
-//         setPeerList((prevList) =>
-//           prevList.filter((peer) => peer !== conn.peer)
-//         );
-//       });
-//     });
-
-//     return () => {
-//       if (peer.current) {
-//         peer.current.destroy(); // Clean up when the component is unmounted
-//       }
-//     };
-//   }, []);
-
-//   // Log messages for messaging history
-//   const logMessage = (message) => {
-//     setMessageLog((prevLog) => [...prevLog, message]);
-//   };
-
-//   // Connect to a peer automatically (if not already connected)
-//   const connectToPeer = (targetPeerId) => {
-//     if (!connections.current[targetPeerId]) {
-//       logMessage(`Connecting to ${targetPeerId}...`);
-//       const conn = peer.current.connect(targetPeerId);
-
-//       conn.on("open", () => {
-//         logMessage(`Connected to ${targetPeerId}`);
-//         conn.send("Hi!");
-//         connections.current[targetPeerId] = conn; // Store connection for messaging
-//       });
-
-//       conn.on("data", (data) => {
-//         logMessage(`Received from ${targetPeerId}: ${data}`);
-//       });
-
-//       conn.on("error", (error) => {
-//         logMessage(`Connection error with ${targetPeerId}: ${error}`);
-//       });
-//     }
-//   };
-
-//   // Send a message to all connected peers
-//   const sendMessage = (message) => {
-//     Object.values(connections.current).forEach((conn) => {
-//       conn.send(message);
-//     });
-//     logMessage(`Sent to all: ${message}`);
-//   };
-
-//   // Handle target peer ID change
-//   const handleTargetPeerIdChange = (e) => {
-//     setTargetPeerId(e.target.value);
-//   };
-
-//   // Handle the click on connect button
-//   const handleConnectClick = () => {
-//     if (targetPeerId) {
-//       connectToPeer(targetPeerId);
-//     } else {
-//       logMessage("Please enter a peer ID to connect.");
-//     }
-//   };
-
-//   return (
-//     <div>
-//       <h1>Peer-to-Peer Messaging</h1>
-//       <div>
-//         <h3>Your Peer ID: {peerId}</h3>
-//       </div>
-
-//       <div>
-//         <h3>Connected Peers:</h3>
-//         <ul>
-//           {peerList.map((peerId) => (
-//             <li key={peerId}>{peerId}</li>
-//           ))}
-//         </ul>
-//       </div>
-
-//       <div>
-//         <h3>Messages:</h3>
-//         <div className="messages">
-//           {messageLog.map((msg, index) => (
-//             <div key={index}>{msg}</div>
-//           ))}
-//         </div>
-//       </div>
-
-//       <div>
-//         <input
-//           type="text"
-//           placeholder="Enter Peer ID to connect"
-//           value={targetPeerId}
-//           onChange={handleTargetPeerIdChange}
-//         />
-//         <button onClick={handleConnectClick}>Connect to Peer</button>
-//       </div>
-
-//       <div>
-//         <h3>Send Message to All:</h3>
-//         <input
-//           type="text"
-//           placeholder="Type your message"
-//           onKeyDown={(e) => {
-//             if (e.key === "Enter") {
-//               sendMessage(e.target.value);
-//               e.target.value = ""; // Clear input after sending
-//             }
-//           }}
-//         />
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default PeerComponent;
-
-/** Connections */
 import React, { useState, useEffect, useRef } from "react";
 import Peer from "peerjs";
 
 const PeerComponent = () => {
   // Generate a unique ID with a random suffix to avoid conflicts
   const generateUniqueId = () => {
-    // Create a base ID with timestamp to ensure uniqueness
     const timestamp = new Date().getTime().toString(36);
     const randomStr = Math.random().toString(36).substring(2, 8);
     return `peer_${timestamp}_${randomStr}`;
@@ -194,6 +24,7 @@ const PeerComponent = () => {
   const maxReconnectAttempts = 5;
   const reconnectTimeoutRef = useRef(null);
   const fetchPeersIntervalRef = useRef(null);
+  const connectionIntervals = useRef({}); // Track intervals per connection
   const isComponentMounted = useRef(true);
 
   // Detect platform on component mount
@@ -213,14 +44,13 @@ const PeerComponent = () => {
   const logMessage = (message, isSystemMessage = true) => {
     if (!isComponentMounted.current) return;
 
-    // Always log to console
+    // Always log to console for debugging
     console.log(message);
 
     // Only add to visual message log if it's a user message, not a system message
+    // For user messages, we only show the raw content without timestamp or peer IDs
     if (!isSystemMessage) {
-      const timestamp = new Date().toLocaleTimeString();
-      const formattedMessage = `${timestamp}: ${message}`;
-      setMessageLog((prevLog) => [...prevLog, formattedMessage]);
+      setMessageLog((prevLog) => [...prevLog, message]);
     }
   };
 
@@ -230,7 +60,7 @@ const PeerComponent = () => {
 
     // Clean up any existing peer
     if (peer.current) {
-      logMessage(
+      console.log(
         "Cleaning up existing peer connection before creating a new one"
       );
       try {
@@ -243,55 +73,22 @@ const PeerComponent = () => {
 
     // Generate a new unique ID each time to avoid conflicts
     const newPeerId = generateUniqueId();
-    logMessage(`Initializing peer with new ID: ${newPeerId}`);
+    console.log(`Initializing peer with new ID: ${newPeerId}`);
     setPeerId(newPeerId);
     setConnectionStatus("connecting");
 
     // Enhanced configuration for better cross-platform compatibility
-    // const peerConfig = {
-    //   // host: "172.16.15.127",
-    //   host: "https://multiplayer.tenant-7654b5-asrpods.ord1.ingress.coreweave.cloud",
-    //   // port: 443,
-    //   path: "/",
-    //   debug: 3,
-    //   config: {
-    //     iceServers: [
-    //       { urls: "stun:stun.l.google.com:19302" },
-    //       { urls: "stun:stun1.l.google.com:19302" },
-    //       { urls: "stun:stun2.l.google.com:19302" },
-    //       { urls: "stun:stun3.l.google.com:19302" },
-    //       { urls: "stun:stun4.l.google.com:19302" },
-    //     ],
-    //     // For iOS compatibility, force ICE to use UDP by blocking TCP
-    //     iceTransportPolicy: platform === "ios" ? "all" : "all",
-    //     // Increase timeout for iOS connections which tend to be slower
-    //     iceCandidatePoolSize: platform === "ios" ? 10 : 5,
-    //   },
-    //   // Use best quality and stability settings for iOS
-    //   // These settings can help with iOS-specific connection issues
-    //   connectionOptions: {
-    //     reliable: true,
-    //     serialization: "json",
-    //     metadata: { platform },
-    //   },
-    // };
     const peerConfig = {
-      // Use the Coreweave URL instead of IP address
       host: "multiplayer.tenant-7654b5-asrpods.ord1.ingress.coreweave.cloud",
-      // Remove the port number when using the full URL
-      // port: 9000,  // Remove this line when using the URL
-      path: "/", // Keep the path
-      secure: true, // Add this for HTTPS
-      debug: 3,
+      path: "/",
+      secure: true,
+      debug: 1, // Reduced debug level to minimize console output
       config: {
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
           { urls: "stun:stun1.l.google.com:19302" },
-          { urls: "stun:stun2.l.google.com:19302" },
-          { urls: "stun:stun3.l.google.com:19302" },
-          { urls: "stun:stun4.l.google.com:19302" },
         ],
-        iceTransportPolicy: platform === "ios" ? "all" : "all",
+        iceTransportPolicy: "all",
         iceCandidatePoolSize: platform === "ios" ? 10 : 5,
       },
       connectionOptions: {
@@ -300,6 +97,7 @@ const PeerComponent = () => {
         metadata: { platform },
       },
     };
+
     // Create a new peer
     try {
       peer.current = new Peer(newPeerId, peerConfig);
@@ -308,20 +106,22 @@ const PeerComponent = () => {
       peer.current.on("open", (id) => {
         if (!isComponentMounted.current) return;
 
-        logMessage(`Successfully connected to signaling server with ID: ${id}`);
-        logMessage(`Running on platform: ${platform}`);
+        console.log(
+          `Successfully connected to signaling server with ID: ${id}`
+        );
+        console.log(`Running on platform: ${platform}`);
         setPeerId(id);
         setConnectionStatus("connected");
         reconnectAttempts.current = 0;
 
-        // Start discovering peers
+        // Start discovering peers - but only once
         fetchAndConnectToPeers();
 
-        // Set up periodic peer discovery
+        // Set up periodic peer discovery - less frequent polling
         clearInterval(fetchPeersIntervalRef.current);
         fetchPeersIntervalRef.current = setInterval(
           fetchAndConnectToPeers,
-          5000
+          15000 // Increased to 15 seconds to reduce connection attempts
         );
       });
 
@@ -329,7 +129,6 @@ const PeerComponent = () => {
         if (!isComponentMounted.current) return;
 
         console.error("PeerJS error:", error);
-        logMessage(`Error: ${error.type} - ${error.message}`);
 
         if (error.type === "peer-unavailable") {
           // This is normal when trying to connect to a peer that isn't available
@@ -337,10 +136,10 @@ const PeerComponent = () => {
         }
 
         if (error.type === "unavailable-id") {
-          // ID conflict - generate a new one and reconnect immediately
-          logMessage("ID conflict detected, will reconnect with a new ID");
+          // ID conflict - generate a new one and reconnect after a delay
+          console.log("ID conflict detected, will reconnect with a new ID");
           clearTimeout(reconnectTimeoutRef.current);
-          reconnectTimeoutRef.current = setTimeout(initializePeer, 500);
+          reconnectTimeoutRef.current = setTimeout(initializePeer, 1000);
           return;
         }
 
@@ -359,7 +158,7 @@ const PeerComponent = () => {
               10000
             ); // Exponential backoff
 
-            logMessage(
+            console.log(
               `Connection lost. Reconnecting in ${delay / 1000}s (attempt ${
                 reconnectAttempts.current
               }/${maxReconnectAttempts})...`
@@ -368,7 +167,7 @@ const PeerComponent = () => {
             clearTimeout(reconnectTimeoutRef.current);
             reconnectTimeoutRef.current = setTimeout(initializePeer, delay);
           } else {
-            logMessage(
+            console.log(
               `Failed to reconnect after ${maxReconnectAttempts} attempts.`
             );
           }
@@ -378,35 +177,26 @@ const PeerComponent = () => {
       peer.current.on("disconnected", () => {
         if (!isComponentMounted.current) return;
 
-        logMessage(
+        console.log(
           "Disconnected from signaling server. Attempting to reconnect..."
         );
         setConnectionStatus("disconnected");
 
-        // iOS-specific: Try multiple reconnect strategies
-        if (platform === "ios") {
-          logMessage("Trying iOS-specific reconnect strategy...");
+        // Try to reconnect directly first
+        peer.current.reconnect();
 
-          // On iOS, let's try to reconnect directly first
-          peer.current.reconnect();
-
-          // If that doesn't work within 2 seconds, re-initialize
-          setTimeout(() => {
-            if (peer.current && !peer.current.open) {
-              clearTimeout(reconnectTimeoutRef.current);
-              reconnectTimeoutRef.current = setTimeout(initializePeer, 1000);
-            }
-          }, 2000);
-        } else {
-          // For other platforms, just re-initialize
-          clearTimeout(reconnectTimeoutRef.current);
-          reconnectTimeoutRef.current = setTimeout(initializePeer, 1000);
-        }
+        // If that doesn't work within 3 seconds, re-initialize
+        setTimeout(() => {
+          if (peer.current && !peer.current.open) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = setTimeout(initializePeer, 3000);
+          }
+        }, 3000);
       });
 
       peer.current.on("connection", handleIncomingConnection);
     } catch (err) {
-      logMessage(`Failed to initialize peer: ${err.message}`);
+      console.log(`Failed to initialize peer: ${err.message}`);
 
       // Try again with exponential backoff
       if (reconnectAttempts.current < maxReconnectAttempts) {
@@ -426,7 +216,7 @@ const PeerComponent = () => {
   const handleIncomingConnection = (conn) => {
     if (!isComponentMounted.current) return;
 
-    logMessage(`Incoming connection from: ${conn.peer}`);
+    console.log(`Incoming connection from: ${conn.peer}`);
 
     // Store the connection
     connections.current[conn.peer] = conn;
@@ -441,43 +231,61 @@ const PeerComponent = () => {
     if (remotePeerId === peerId) return; // Don't connect to ourselves
     if (connections.current[remotePeerId]?.open) return; // Already connected
 
-    try {
-      logMessage(`Initiating connection to: ${remotePeerId}`);
+    // Don't spam connection attempts
+    const lastAttempt = connections.current[remotePeerId]?.lastAttempt || 0;
+    const now = Date.now();
+    if (now - lastAttempt < 10000) {
+      // Prevent reconnecting within 10 seconds
+      return;
+    }
 
-      // iOS-specific connection parameters for better compatibility
+    try {
+      console.log(`Initiating connection to: ${remotePeerId}`);
+
+      // Track when we last attempted this connection
+      if (!connections.current[remotePeerId]) {
+        connections.current[remotePeerId] = { lastAttempt: now };
+      } else {
+        connections.current[remotePeerId].lastAttempt = now;
+      }
+
+      // Connection options
       const connectionOptions = {
         reliable: true,
-        serialization: "json", // This works better across platforms than binary
+        serialization: "json",
         metadata: {
           platform,
-          peerId: peerId, // Include our ID in metadata for better identification
-          timestamp: Date.now(), // Add timestamp to help with iOS reconnections
+          peerId: peerId,
+          timestamp: Date.now(),
         },
       };
 
       const conn = peer.current.connect(remotePeerId, connectionOptions);
-
       connections.current[remotePeerId] = conn;
+      connections.current[remotePeerId].lastAttempt = now;
+
       setupConnectionHandlers(conn);
 
-      // iOS-specific timeout for connection establishment
-      if (platform === "ios") {
-        // If connection doesn't open within 10 seconds, retry
-        setTimeout(() => {
-          if (conn && !conn.open) {
-            logMessage(`Connection timeout to ${remotePeerId}, retrying...`);
+      // Add a timeout for connection establishment
+      setTimeout(() => {
+        if (conn && !conn.open) {
+          console.log(`Connection timeout to ${remotePeerId}`);
+          try {
             conn.close();
-            delete connections.current[remotePeerId];
+          } catch (err) {}
 
-            // Try again with a small delay
-            setTimeout(() => connectToPeer(remotePeerId), 1000);
-          }
-        }, 10000);
-      }
+          // Only keep record of the last attempt
+          connections.current[remotePeerId] = {
+            lastAttempt: Date.now(),
+          };
+        }
+      }, 10000);
     } catch (err) {
-      logMessage(`Failed to connect to ${remotePeerId}: ${err.message}`);
-      // Remove failed connection
-      delete connections.current[remotePeerId];
+      console.log(`Failed to connect to ${remotePeerId}: ${err.message}`);
+      // Keep track of failed attempt
+      connections.current[remotePeerId] = {
+        lastAttempt: Date.now(),
+      };
     }
   };
 
@@ -486,18 +294,24 @@ const PeerComponent = () => {
     if (!conn) return;
 
     // Remove any existing listeners to prevent duplicates
-    if (typeof conn.removeAllListeners === "function") {
-      conn.removeAllListeners();
+    try {
+      conn.removeAllListeners?.();
+    } catch (err) {}
+
+    // Clear any existing interval for this connection
+    if (connectionIntervals.current[conn.peer]) {
+      clearInterval(connectionIntervals.current[conn.peer]);
+      delete connectionIntervals.current[conn.peer];
     }
 
     conn.on("open", () => {
       if (!isComponentMounted.current) return;
 
-      logMessage(`Connection established with: ${conn.peer}`);
+      console.log(`Connection established with: ${conn.peer}`);
 
       // Extract remote platform from metadata if available
       const remotePlatform = conn.metadata?.platform || "unknown";
-      logMessage(`Peer ${conn.peer} is on platform: ${remotePlatform}`);
+      console.log(`Peer ${conn.peer} is on platform: ${remotePlatform}`);
 
       // Add to peer list if not already there
       setPeerList((prevList) => {
@@ -509,28 +323,26 @@ const PeerComponent = () => {
 
       // Send a greeting message
       try {
-        // Include platform info in greeting
-        conn.send(`Hello from ${peerId} (${platform})!`);
+        conn.send(`Hello from ${platform}`);
       } catch (err) {
-        logMessage(`Failed to send greeting to ${conn.peer}: ${err.message}`);
+        console.log(`Failed to send greeting to ${conn.peer}: ${err.message}`);
       }
 
-      // For iOS, send a "ping" message every 30 seconds to keep connection alive
-      if (platform === "ios") {
-        const pingInterval = setInterval(() => {
+      // For iOS or Android, send a "ping" message every 30 seconds to keep connection alive
+      if (platform === "ios" || platform === "android") {
+        connectionIntervals.current[conn.peer] = setInterval(() => {
           if (conn && conn.open) {
             try {
               conn.send("__ping__");
             } catch (err) {
-              clearInterval(pingInterval);
+              clearInterval(connectionIntervals.current[conn.peer]);
+              delete connectionIntervals.current[conn.peer];
             }
           } else {
-            clearInterval(pingInterval);
+            clearInterval(connectionIntervals.current[conn.peer]);
+            delete connectionIntervals.current[conn.peer];
           }
         }, 30000);
-
-        // Clean up interval when component unmounts
-        return () => clearInterval(pingInterval);
       }
     });
 
@@ -540,43 +352,56 @@ const PeerComponent = () => {
       // Skip internal ping messages
       if (data === "__ping__") return;
 
-      // Log received messages to the message log (not a system message)
-      logMessage(`Received from ${conn.peer}: ${data}`, false);
+      // Get the platform from connection metadata
+      const remotePlatform = conn.metadata?.platform || "unknown";
+
+      // Format the message to ONLY show content and platform - no timestamps or peer IDs
+      if (typeof data === "string") {
+        // Log received messages to the message log (not a system message)
+        logMessage(`${data}`, false);
+      }
     });
 
     conn.on("close", () => {
       if (!isComponentMounted.current) return;
 
-      logMessage(`Connection with ${conn.peer} closed.`);
-      delete connections.current[conn.peer];
-      setPeerList((prevList) => prevList.filter((id) => id !== conn.peer));
+      console.log(`Connection with ${conn.peer} closed.`);
 
-      // For iOS, try to reconnect to the peer after a short delay
-      if (platform === "ios") {
-        setTimeout(() => {
-          // Try to re-establish connection
-          if (peer.current && peer.current.open) {
-            connectToPeer(conn.peer);
-          }
-        }, 2000);
+      // Clear any interval for this connection
+      if (connectionIntervals.current[conn.peer]) {
+        clearInterval(connectionIntervals.current[conn.peer]);
+        delete connectionIntervals.current[conn.peer];
       }
+
+      // Keep the last attempt record but mark connection as closed
+      connections.current[conn.peer] = {
+        lastAttempt: Date.now(),
+        closed: true,
+      };
+
+      // Update the peer list
+      setPeerList((prevList) => prevList.filter((id) => id !== conn.peer));
     });
 
     conn.on("error", (err) => {
       if (!isComponentMounted.current) return;
 
-      logMessage(`Connection error with ${conn.peer}: ${err}`);
-      delete connections.current[conn.peer];
-      setPeerList((prevList) => prevList.filter((id) => id !== conn.peer));
+      console.log(`Connection error with ${conn.peer}: ${err}`);
 
-      // For iOS, try to reconnect after errors
-      if (platform === "ios") {
-        setTimeout(() => {
-          if (peer.current && peer.current.open) {
-            connectToPeer(conn.peer);
-          }
-        }, 3000);
+      // Clear any interval for this connection
+      if (connectionIntervals.current[conn.peer]) {
+        clearInterval(connectionIntervals.current[conn.peer]);
+        delete connectionIntervals.current[conn.peer];
       }
+
+      // Keep the last attempt record but mark connection as errored
+      connections.current[conn.peer] = {
+        lastAttempt: Date.now(),
+        error: true,
+      };
+
+      // Update the peer list
+      setPeerList((prevList) => prevList.filter((id) => id !== conn.peer));
     });
   };
 
@@ -584,18 +409,30 @@ const PeerComponent = () => {
   const fetchAndConnectToPeers = async () => {
     if (!isComponentMounted.current) return;
     if (!peer.current || !peer.current.open) {
-      logMessage("Cannot fetch peers - not connected to server");
+      console.log("Cannot fetch peers - not connected to server");
       return;
     }
 
+    // Don't fetch too often if we already have connections
+    const openConnections = Object.values(connections.current).filter(
+      (conn) => conn && conn.open
+    );
+
+    if (openConnections.length > 0) {
+      // Reduce polling frequency when we already have connections
+      // 70% chance to skip when we already have peers
+      if (Math.random() > 0.3) {
+        return;
+      }
+    }
+
     try {
-      // const response = await fetch("http://172.16.15.127:9000/peerjs/peers");
       const response = await fetch(
         "https://multiplayer.tenant-7654b5-asrpods.ord1.ingress.coreweave.cloud/peerjs/peers"
       );
 
       if (!response.ok) {
-        logMessage(
+        console.log(
           `Error fetching peers: ${response.status} ${response.statusText}`
         );
         return;
@@ -605,62 +442,49 @@ const PeerComponent = () => {
 
       if (!isComponentMounted.current) return;
 
-      // Connect to each peer that we're not already connected to
+      // Connect to new peers that we're not already connected to
       if (peers && Array.isArray(peers) && peers.length > 0) {
-        logMessage(`Discovered ${peers.length} peers on the server`);
+        console.log(`Discovered ${peers.length} peers on the server`);
 
-        // For iOS, add a small delay between connection attempts
-        // This helps prevent overwhelming the WebRTC stack on iOS
-        if (platform === "ios") {
-          for (let i = 0; i < peers.length; i++) {
-            const remotePeerId = peers[i];
-            if (
-              remotePeerId !== peerId &&
-              !connections.current[remotePeerId]?.open
-            ) {
-              connectToPeer(remotePeerId);
-              // Wait 500ms between connection attempts on iOS
-              await new Promise((resolve) => setTimeout(resolve, 500));
-            }
+        // Get already connected peer IDs
+        const connectedPeerIds = Object.keys(connections.current).filter(
+          (id) => connections.current[id]?.open
+        );
+
+        // Find only new peers to connect to
+        const newPeers = peers.filter(
+          (remotePeerId) =>
+            remotePeerId !== peerId &&
+            !connectedPeerIds.includes(remotePeerId) &&
+            (!connections.current[remotePeerId]?.lastAttempt ||
+              Date.now() - connections.current[remotePeerId].lastAttempt >
+                30000)
+        );
+
+        if (newPeers.length > 0) {
+          console.log(`Found ${newPeers.length} new peers to connect to`);
+
+          // Connect to new peers with a delay between attempts
+          for (let i = 0; i < newPeers.length; i++) {
+            connectToPeer(newPeers[i]);
+            // Add delay between connection attempts to reduce network traffic spikes
+            await new Promise((resolve) => setTimeout(resolve, 1000));
           }
-        } else {
-          // For other platforms, connect to all at once
-          peers.forEach((remotePeerId) => {
-            if (
-              remotePeerId !== peerId &&
-              !connections.current[remotePeerId]?.open
-            ) {
-              connectToPeer(remotePeerId);
-            }
-          });
         }
       } else {
-        logMessage("No other peers found on the server");
-      }
-
-      // On iOS, log the current connections for debugging
-      if (platform === "ios") {
-        const openConnections = Object.entries(connections.current)
-          .filter(([_, conn]) => conn && conn.open)
-          .map(([id, _]) => id);
-
-        logMessage(
-          `Current open connections on iOS: ${openConnections.length}`
-        );
-        console.log("Open connections:", openConnections);
+        console.log("No other peers found on the server");
       }
     } catch (error) {
       console.error("Error fetching peers:", error);
-      logMessage(`Failed to fetch peers: ${error.message}`);
     }
   };
 
-  // Force connection refresh (especially useful for iOS)
+  // Force connection refresh
   const forceRefreshConnections = () => {
-    logMessage("Forcing connection refresh...");
+    console.log("Forcing connection refresh...");
 
     // Close all current connections
-    Object.values(connections.current).forEach((conn) => {
+    Object.entries(connections.current).forEach(([peerId, conn]) => {
       if (conn && conn.open) {
         try {
           conn.close();
@@ -668,14 +492,25 @@ const PeerComponent = () => {
           console.error("Error closing connection:", err);
         }
       }
+
+      // Track last attempt time
+      connections.current[peerId] = {
+        lastAttempt: Date.now(),
+        forceClosed: true,
+      };
     });
 
-    // Clear connections
-    connections.current = {};
+    // Clear all connection intervals
+    Object.keys(connectionIntervals.current).forEach((peerId) => {
+      clearInterval(connectionIntervals.current[peerId]);
+      delete connectionIntervals.current[peerId];
+    });
+
+    // Update the UI
     setPeerList([]);
 
-    // Fetch peers again
-    fetchAndConnectToPeers();
+    // Fetch peers again after a short delay
+    setTimeout(fetchAndConnectToPeers, 2000);
   };
 
   // Send a message to all connected peers
@@ -684,38 +519,37 @@ const PeerComponent = () => {
     if (!messageInput.trim()) return;
 
     const message = messageInput.trim();
-    let sentCount = 0;
-    let failedCount = 0;
 
-    const connectedPeers = Object.entries(connections.current).filter(
-      ([_, conn]) => conn && conn.open
+    // Format message to include platform
+    const formattedMessageForLog = `${message}`;
+
+    // Get all open connections
+    const openConnections = Object.values(connections.current).filter(
+      (conn) => conn && conn.open
     );
 
-    if (connectedPeers.length === 0) {
-      logMessage("No connected peers to send to!");
+    if (openConnections.length === 0) {
+      console.log("No connected peers to send to!");
       return;
     }
 
-    connectedPeers.forEach(([peerId, conn]) => {
+    // Send the message to all connected peers
+    let sentCount = 0;
+    openConnections.forEach((conn) => {
       try {
+        // Just send the raw message text - the receiving end will format it
         conn.send(message);
         sentCount++;
       } catch (err) {
-        logMessage(`Failed to send to ${peerId}: ${err.message}`);
-        failedCount++;
+        console.error(`Failed to send to a peer: ${err.message}`);
       }
     });
 
     // Log the sent message to the message log (not a system message)
-    logMessage(`You sent: ${message}`, false);
+    // For display, format with platform but no timestamp or peer ID
+    logMessage(formattedMessageForLog, false);
 
-    // Only log the status to console
-    console.log(
-      `Sent "${message}" to ${sentCount} peers${
-        failedCount > 0 ? ` (${failedCount} failed)` : ""
-      }`
-    );
-
+    console.log(`Sent "${message}" to ${sentCount} peers`);
     setMessageInput("");
   };
 
@@ -724,31 +558,37 @@ const PeerComponent = () => {
     isComponentMounted.current = true;
     initializePeer();
 
-    // iOS-specific: Add more frequent peer discovery to improve connection odds
+    // Reduced frequency iOS-specific polling
     let iosRefreshInterval;
     if (platform === "ios") {
       iosRefreshInterval = setInterval(() => {
-        if (
-          peer.current &&
-          peer.current.open &&
-          Object.keys(connections.current).length === 0
-        ) {
-          logMessage("iOS extra connection attempt...");
+        const hasOpenConnections = Object.values(connections.current).some(
+          (conn) => conn && conn.open
+        );
+
+        if (peer.current && peer.current.open && !hasOpenConnections) {
+          console.log("iOS extra connection attempt (no open connections)...");
           fetchAndConnectToPeers();
         }
-      }, 15000); // Every 15 seconds if no connections
+      }, 30000); // Reduced to once every 30 seconds
     }
 
     // Cleanup when component unmounts
     return () => {
       isComponentMounted.current = false;
 
-      logMessage("Component unmounting, cleaning up connections...");
+      console.log("Component unmounting, cleaning up connections...");
 
       // Clear all timers
       clearTimeout(reconnectTimeoutRef.current);
       clearInterval(fetchPeersIntervalRef.current);
       if (iosRefreshInterval) clearInterval(iosRefreshInterval);
+
+      // Clear all connection intervals
+      Object.keys(connectionIntervals.current).forEach((peerId) => {
+        clearInterval(connectionIntervals.current[peerId]);
+      });
+      connectionIntervals.current = {};
 
       // Close all connections
       Object.values(connections.current).forEach((conn) => {
@@ -774,7 +614,7 @@ const PeerComponent = () => {
         peer.current = null;
       }
     };
-  }, [platform]); // Dependency on platform to re-initialize if platform detection changes
+  }, [platform]);
 
   // Status indicator color
   const getStatusColor = () => {
@@ -803,7 +643,7 @@ const PeerComponent = () => {
         maxWidth: "800px",
         margin: "0 auto",
         padding: "20px",
-        color: "black", // Ensure all text is black
+        color: "black",
       }}
     >
       <h1 style={{ color: "black" }}>Peer-to-Peer Messaging ({platform})</h1>
@@ -814,7 +654,7 @@ const PeerComponent = () => {
           padding: "15px",
           borderRadius: "5px",
           marginBottom: "20px",
-          color: "black", // Ensure text is black
+          color: "black",
         }}
       >
         <h3 style={{ margin: "0 0 10px 0", color: "black" }}>
@@ -854,7 +694,6 @@ const PeerComponent = () => {
             </button>
           )}
 
-          {/* Special button for iOS to force refresh connections */}
           <button
             onClick={forceRefreshConnections}
             style={{
@@ -884,7 +723,7 @@ const PeerComponent = () => {
               minHeight: "100px",
               maxHeight: "200px",
               overflowY: "auto",
-              color: "black", // Ensure text is black
+              color: "black",
             }}
           >
             {peerList.length > 0 ? (
@@ -896,7 +735,7 @@ const PeerComponent = () => {
                       marginBottom: "8px",
                       display: "flex",
                       alignItems: "center",
-                      color: "black", // Ensure text is black
+                      color: "black",
                     }}
                   >
                     <span
@@ -924,7 +763,7 @@ const PeerComponent = () => {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  color: "black", // Ensure text is black
+                  color: "black",
                 }}
               >
                 <p style={{ color: "black" }}>No peers connected yet</p>
@@ -946,7 +785,7 @@ const PeerComponent = () => {
                   padding: "8px",
                   borderRadius: "4px",
                   border: "1px solid #ccc",
-                  color: "black", // Ensure text is black
+                  color: "black",
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !isSendDisabled) {
@@ -983,7 +822,7 @@ const PeerComponent = () => {
               borderRadius: "5px",
               padding: "10px",
               backgroundColor: "#f9f9f9",
-              color: "black", // Ensure text is black
+              color: "black",
             }}
           >
             {messageLog.length > 0 ? (
@@ -996,7 +835,7 @@ const PeerComponent = () => {
                     whiteSpace: "pre-wrap",
                     wordBreak: "break-word",
                     fontFamily: "monospace",
-                    color: "black", // Ensure text is black
+                    color: "black",
                   }}
                 >
                   {msg}
@@ -1005,7 +844,7 @@ const PeerComponent = () => {
             ) : (
               <div
                 style={{
-                  color: "black", // Changed from #888 to black
+                  color: "black",
                   textAlign: "center",
                   marginTop: "20px",
                 }}
@@ -1021,7 +860,7 @@ const PeerComponent = () => {
               style={{
                 padding: "5px 10px",
                 backgroundColor: "#f44336",
-                color: "black", // Changed to black
+                color: "white",
                 border: "none",
                 borderRadius: "4px",
                 cursor: "pointer",
